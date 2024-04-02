@@ -1,20 +1,106 @@
 <style>
-    body{font-family:Trebuchet MS, sans-serif}
+    body{font-family:Trebuchet MS,sans-serif}
     input,textarea,button{margin:3px}
     textarea{height:100px;width:400px}
+    section.box{width:50%}
+    section div{padding:9px}
 </style>
 
-<h2>Controller Pak (mockup)</h2>
+<div style="margin:9px">
+<h2>Controller Pak Library Simulation</h2>
+<button onclick="insert()">Read C-Pak</button>
+<button disabled>Format C-Pak</button><br>
+<button disabled>Corrupt C-Pak ID area</button>
+<button disabled>Corrupt C-Pak IndexTable</button>
+<button disabled>Corrupt C-Pak NoteTable</button><br>
+<button disabled>Erase C-Pak</button><br>
+</div>
 
-<button>Insert empty C-Pak</button>
-<button>Insert occupied C-Pak</button>
-<br>
-<button>Corrupt C-Pak ID area</button>
-<button>Corrupt C-Pak IndexTable</button>
-<button>Corrupt C-Pak NoteTable</button>
-<br>
-<button>Erase C-Pak</button>
+<section class=box style="float:left;word-wrap:break-word;background:#EEE;height:75%;overflow-y:scroll">
+    <div id="console"></div>
+</section>
+<section class=box style="float:right">
+    <div id="status"></div>
+</section>
 
-<p>
-    Controller Pak is not inserted.
-</p>
+<script>
+    // Element selectors, utility code etc.
+    let con  = document.querySelector('div#console');
+    let stat = document.querySelector('div#status');
+</script>
+
+<script>
+    // Main C-Pak Sim code
+    // C-Pak SRAM uses 32,768 bytes of data, represented by this array.
+    let SRAM = new Uint8Array(32768);
+
+    function checkIndexes() {
+        con.innerHTML += 'Checking indexes...<br>';
+        // Start at Index 5 (0x10A)
+        for(let i = 0x10A; i < 0x200; i += 2) {
+            const idx = SRAM[i + 1];
+            const validIndex = (idx === 1) || (idx >= 5 && idx <= 127);
+            // First check if IndexUnit is free.
+            if(idx === 3) {
+                con.innerHTML += `IndexUnit ${(i-0x10A)/2+5} is free.<br>`;
+            }
+            // Now check if it's range is valid.
+            else if(validIndex) {
+                con.innerHTML += `IndexUnit ${(i-0x10A)/2+5} is occupied.<br>`;
+            }
+            // IndexUnit is inconsistent/corrupt; turn it into free space.
+            else {
+                SRAM[i + 1] = 3;
+                con.innerHTML += `IndexUnit ${(i-0x10A)/2+5} was invalid and turned into free space.<br>`;
+            }
+        }
+    }
+
+    function checkNotes() {
+        con.innerHTML += 'Checking notes...<br>';
+        for(let i = 0x300; i < 0x500; i += 32) {
+            // i+7 is the LSB of the 'startIndex'. Expected range is 5-127.
+            const si = SRAM[i + 7];
+            // i+6 is the MSB, always 0. This validates the range of 'startIndex'.
+            const validIndex = (SRAM[i + 6] === 0) && (si >= 5 && si <= 127);
+            // Unused dataSum which we know is explicitly written to 0 when saving.
+            const validSum = SRAM[i + 10] === 0 && SRAM[i + 11] === 0;
+            // Check if given 'startIndex' has valid 'nextIndex' in IndexTable.
+            const o = 0x100; // Note: o may target primary/backup location;
+            const ni = SRAM[o + si*2 + 1];
+            const validEntry = (ni === 1) || (ni >= 5 && ni <= 127);
+            // Check game+publisher codes.
+            let gSum = SRAM[i] + SRAM[i + 1] + SRAM[i + 2] + SRAM[i + 3],
+                pSum = SRAM[i + 4] + SRAM[i + 5];
+            const validCode = gSum !== 0 && pSum !== 0;
+            // TODO: validEntry is not usable yet.
+            // If NoteEntry is occupied and valid:
+            if(validIndex && validSum && validCode) {
+                con.innerHTML += `NoteEntry ${(i-0x300)/32+1} is valid.<br>`;
+            }
+            // if NoteEntry is unoccupied (empty):
+            else if(gSum+pSum === 0 && si+SRAM[i+6] === 0) {
+                con.innerHTML += `NoteEntry ${(i-0x300)/32+1} is empty.<br>`;
+            }
+            // Otherwise, NoteEntry is inconsistent/corrupt.
+            else {
+                con.innerHTML += `NoteEntry ${(i-0x300)/32+1} is corrupt.<br>`;
+            }
+        }
+    }
+
+    // Script which runs when "inserting" the Controller Pak.
+    function insert() {
+        con.innerHTML += `Controller Pak is inserted and ready.<br>`;
+        checkIndexes();
+        checkNotes();
+        con.innerHTML += `<br>`;
+    }
+
+    // Other stuff
+    window.onload = function() {
+        document.querySelectorAll("button")[0].click();
+    }
+
+
+</script>
