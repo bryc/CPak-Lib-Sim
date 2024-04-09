@@ -104,6 +104,13 @@ int check() {
         // This can actually repair errors that libultra can't
         if(SRAM[i + 0] != 0) SRAM[i + 0] = 0x00;
     }
+    // Clean potential garbage data in unused area
+    // These bytes were undefined, but garbage data can exist here
+    // We should sanitize these to zero to avoid confusion
+    if(SRAM[0x103] != 0) SRAM[0x103] = 0x00; // page 1
+    if(SRAM[0x105] != 0) SRAM[0x105] = 0x00; // page 2
+    if(SRAM[0x107] != 0) SRAM[0x107] = 0x00; // page 3
+    if(SRAM[0x109] != 0) SRAM[0x109] = 0x00; // page 4
 }
 
 int main() {
