@@ -44,10 +44,11 @@ int check() {
     printf("iTable: ");
     for(int i = 5; i < 128; i++) {
         // any unreferenced indexes must be startIndexes
-        if((indexFlags[i] & 4) == 0)
-        // set itblStart flag
-        indexFlags[i] |= 2,
-        printf("%02X ", i);
+        if((indexFlags[i] & 4) == 0) {
+            // set itblStart flag
+            indexFlags[i] |= 2;
+            printf("%02X ", i);
+        }
     }
     // DEBUG: Display the startIndex parity values
     printf("\nParity: ");
