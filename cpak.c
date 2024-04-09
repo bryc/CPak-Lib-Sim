@@ -101,8 +101,8 @@ int check() {
             SRAM[i + 1] = 0x03;
         }
         // These bytes should be zero on a standard C-Pak
-        // This can repair errors that libultra would miss
-        if(SRAM[i + 0] != 0) SRAM[i + 0] = 0xff;
+        // This can actually repair errors that libultra can't
+        if(SRAM[i + 0] != 0) SRAM[i + 0] = 0x00;
     }
 }
 
