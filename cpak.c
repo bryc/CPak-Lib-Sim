@@ -1,7 +1,8 @@
 #include <stdio.h>
+#include <stdint.h>
 
 // C-Pak SRAM is 32 KiB
-char SRAM[32768] = {0};
+uint8_t SRAM[32768] = {0};
 
 // IndexTable parser flags
 //   When checking IndexTable, bit flags are used for each index:
@@ -13,13 +14,13 @@ char SRAM[32768] = {0};
 //   0x20 = .. verified chain in backup (?) TODO
 //   0x40 = ..
 //   0x80 = ..
-char indexFlags[128] = {0};
+uint8_t indexFlags[128] = {0};
 
 int check() {
     // Obtain startIndexes from NoteTable
     printf("Finding startIndexes...\nnTable: ");
     for(int i = 0x300; i < 0x500; i += 32) {
-        char si = SRAM[i + 7];
+        uint8_t si = SRAM[i + 7];
         if(si >= 5 && si <= 127) {
             // set ntblStart flag
             indexFlags[si] |= 1;
@@ -31,7 +32,7 @@ int check() {
     // Mark nextIndex values and free slots
     // This is done to isolate startIndexes
     for(int i = 0x10A; i < 0x200; i += 2) {
-        char ni = SRAM[i + 1];
+        uint8_t ni = SRAM[i + 1];
         // values under 5 must also be marked, except 1
         if(ni != 1 && ni < 5) ni = (i - 0x100) / 2;
         // set isDupe flag if a duplicate is found
@@ -62,7 +63,7 @@ int check() {
     for(int i = 5; i < 128; i++) {
         // Only check startIndex if seen in both sources
         if((indexFlags[i] & 3) == 3) {
-            char ci = i, ni, valid = 0, count = 0;
+            uint8_t ci = i, ni, valid = 0, count = 0;
             printf("\n -> Chain @ %02X:\n", ci);
             while(1) {
                 printf("%02X ", ci);
