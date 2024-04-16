@@ -84,19 +84,6 @@ int check() {
                 ni = SRAM[0x100 + (ci*2) + 1];
                 nv = SRAM[0x100 + (ni*2) + 1];
 
-                // Repairs various errors using backup table
-                if(indexFlags[ci] & 0x40 && !(indexFlags[ni] & 0x1) || (nv < 0x05 || nv > 0x7F) || (indexFlags[ni] & 0x02 && !(indexFlags[ni] & 0x08))) {
-                    // Copy backup index to primary
-                    if(SRAM[0x100 + (ci*2) + 1] != SRAM[0x200 + (ci*2) + 1]) {
-                    printf("\n    \x1b[33mRepaired %02X", ni);
-                    SRAM[0x100 + (ci*2) + 1] = SRAM[0x200 + (ci*2) + 1];
-                    ni = SRAM[0x100 + (ci*2) + 1];
-                    printf(" -> %02X\x1b[0m\n", ni);
-                    } else {
-                    // Clear dupe error flag since we are repairing it via bkup
-                    indexFlags[ni] &= ~0x02;
-                    }
-                }
                 if(indexFlags[ci] & 0x02) {
                     printf("\n    \x1b[31mERROR: Encountered duplicate index %02X\x1b[0m\n", ni);
                     break; // kill the loop
