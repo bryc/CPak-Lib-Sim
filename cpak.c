@@ -7,75 +7,101 @@ uint8_t SRAM[32768] = {0};
 // IndexTable parser flags
 //   When checking IndexTable, bit flags are used for each index:
 //
-//   0x01 = this index is a startIndex in NoteTable  (we expect both)
-//   0x02 = this index is a startIndex in IndexTable (we expect both)
-//   0x04 = this index is referenced in IndexTable
-//   0x08 = this index is referenced twice (critical error)
-//   0x10 = this index is part of a verified chain
-//   0x20 = .. verified chain in backup (?) TODO
-//   0x40 = ..
-//   0x80 = ..
+//   0x01 = IndexTable 1 - Verified startIndex
+//   0x02 = IndexTable 1 - Dupe index error
+//   0x04 = IndexTable 2 - Verified startIndex
+//   0x08 = IndexTable 2 - Dupe index error
+//   0x10 = IndexTable 1 - Verified chain member (safe)
+//   0x20 = IndexTable 2 - Verified chain member (safe)
+//   0x40 = Backup is NOT equal to Primary
+//   0x80 = 
+//   Temp flags during initial steps
+//   0x20 = IndexTable 2 - Index is referenced
+//   0x40 = IndexTable 1 - Index is referenced
+//   0x80 = NoteTable    - startIndex found
 uint8_t indexFlags[128] = {0};
 
 int check() {
     // Obtain startIndexes from NoteTable
-    printf("Finding startIndexes...\nnTable: ");
+    // Provides important context for IndexTable check
     for(int i = 0x300; i < 0x500; i += 32) {
         uint8_t si = SRAM[i + 7];
         if(si >= 5 && si <= 127) {
-            // set ntblStart flag
-            indexFlags[si] |= 0x01;
-            printf("%02X ", si);
+            // TempFlag: NoteTable - startIndex found
+            indexFlags[si] |= 0x80;
         }
     }
-    printf("\n");
 
-    // Mark nextIndex values and free slots
-    // This is done to isolate startIndexes
-    for(int i = 0x10A; i < 0x200; i += 2) {
-        uint8_t ni = SRAM[i + 1];
-        // values under 5 must also be marked, except 1
-        if(ni != 1 && ni < 5) ni = (i - 0x100) / 2;
-        // set isDupe flag if a duplicate is found
-        if(indexFlags[ni] & 0x04) indexFlags[ni] |= 0x08;
-        // set isFound flag.
-        indexFlags[ni] |= 0x04;
+    // Obtain nextIndex values within IndexTable
+    // This is to isolate the startIndexes from table
+    for(int i = 5; i < 128; i++) {
+        // Primary
+        uint8_t ni = SRAM[0x100 + (i*2) + 1];
+        // Values < 5 must also be filtered, except 1
+        if(ni != 1 && ni < 5) ni = i;
+        // PermFlag: IndexTable 1 - Dupe index error
+        if(indexFlags[ni] & 0x40) indexFlags[ni] |= 0x02;
+        // TempFlag: IndexTable 1 - Index is referenced
+        indexFlags[ni] |= 0x40;
+
+        // Backup
+        ni = SRAM[0x200 + (i*2) + 1];
+        // Values < 5 must also be filtered, except 1
+        if(ni != 1 && ni < 5) ni = i;
+        // PermFlag: IndexTable 2 - Dupe index error
+        if(indexFlags[ni] & 0x20) indexFlags[ni] |= 0x08;
+        // TempFlag: IndexTable 2 - Index is referenced
+        indexFlags[ni] |= 0x20;
     }
 
-    // Mark all startIndexes found
-    printf("iTable: ");
+    // Mark the valid startIndexes
     for(int i = 5; i < 128; i++) {
-        // any unreferenced indexes must be startIndexes
-        if((indexFlags[i] & 0x04) == 0) {
-            // set itblStart flag
-            indexFlags[i] |= 0x02;
-            printf("%02X ", i);
+        // NoteTable startIndex  +  IndexTable startIndex = good
+        if(indexFlags[i] & 0x80 && !(indexFlags[i] & 0x40)) {
+            indexFlags[i] |= 0x01;
+        }
+        // Same, but for backup
+        if(indexFlags[i] & 0x80 && !(indexFlags[i] & 0x20)) {
+            indexFlags[i] |= 0x04;
+        }
+        // Clear these bits, since we're done with them
+        indexFlags[i] &= 0x1F; // clear bits 5+6+7
+        // Mark whether backup differs from primary
+        if(SRAM[0x100 + (i*2) + 1] != SRAM[0x200 + (i*2) + 1]) {
+            indexFlags[i] |= 0x40;
         }
     }
-    // DEBUG: Display the startIndex parity values
-    printf("\nParity: ");
-    // Check startIndexes
-    for(int i = 5; i < 128; i++) {
-        if(indexFlags[i] & 0x03) printf("%02X ", indexFlags[i] & 0x03);
-    }
-    printf("\n");
 
     // Validate any index chains found
     for(int i = 5; i < 128; i++) {
         // Only check startIndex if seen in both sources
-        if((indexFlags[i] & 0x03) == 0x03) {
-            uint8_t ci = i, ni, valid = 0, count = 0;
+        if(indexFlags[i] & 0x05) {
+            uint8_t ci = i, ni, nv, valid = 0, count = 0;
             printf("\n -> Chain @ %02X:\n", ci);
-            while(1) {
+            while(ci != 1) {
                 printf("%02X ", ci);
                 count++;
                 ni = SRAM[0x100 + (ci*2) + 1];
-                // If the nextIndex is a dupe in our flags, the chain is corrupt/unreliable
-                if(ni != 1 && indexFlags[ni] & 0x08) {
+                nv = SRAM[0x100 + (ni*2) + 1];
+
+                // Repairs various errors using backup table
+                if(indexFlags[ci] & 0x40 && !(indexFlags[ni] & 0x1) || (nv < 0x05 || nv > 0x7F) || (indexFlags[ni] & 0x02 && !(indexFlags[ni] & 0x08))) {
+                    // Copy backup index to primary
+                    if(SRAM[0x100 + (ci*2) + 1] != SRAM[0x200 + (ci*2) + 1]) {
+                    printf("\n    \x1b[33mRepaired %02X", ni);
+                    SRAM[0x100 + (ci*2) + 1] = SRAM[0x200 + (ci*2) + 1];
+                    ni = SRAM[0x100 + (ci*2) + 1];
+                    printf(" -> %02X\x1b[0m\n", ni);
+                    } else {
+                    // Clear dupe error flag since we are repairing it via bkup
+                    indexFlags[ni] &= ~0x02;
+                    }
+                }
+                if(indexFlags[ci] & 0x02) {
                     printf("\n    \x1b[31mERROR: Encountered duplicate index %02X\x1b[0m\n", ni);
                     break; // kill the loop
                 }
-                // If the nextIndex is a value of 1, we made it to the end of a sequence
+                // If nextIndex is 1, we are done here
                 if(ni == 1) {
                     valid = 1; // reaching this point means we found valid data to preserve.
                     break;
