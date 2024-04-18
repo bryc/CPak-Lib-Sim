@@ -19,7 +19,12 @@ When checking IndexTable, bit flags are used for each index:
 */
 uint8_t iFlags[128] = {0};
 
-uint8_t check() {
+uint8_t repair() {
+    uint8_t si_total = 0, ends = 0;
+    // Count the end markers
+    for(uint8_t i = 5; i < 128; i++) {
+        if(SRAM[0x101 + i*2] == 0x01) ends++;
+    }
     // Check all startIndexes in NoteTable
     // First pass - find any conflicts
     for(uint8_t i = 0; i < 16; i++) {
@@ -27,6 +32,7 @@ uint8_t check() {
         uint8_t si = SRAM[0x307 + i*32];
         // If present & valid, attempt to traverse list
         if(si >= 0x05 && si <= 0x7F) {
+            si_total++;
             uint8_t ci = si, ni;
             // primary
             while(ci != 1) {
@@ -66,20 +72,30 @@ uint8_t check() {
             }
         }
     }
-    
     // Check all startIndexes in NoteTable
     // Second pass - complete check
     for(uint8_t i = 0; i < 16; i++) {
         // Read startIndex value from each NoteEntry
-        uint8_t si = SRAM[0x307 + i*32];
+        uint8_t si = SRAM[0x307 + i*32], count = 0;
         // If present & valid, attempt to traverse list
         if(si >= 0x05 && si <= 0x7F) {
             uint8_t ci = si, ni, valid = 0;
             while(ci != 1) {
+                count++;
                 // Get nextIndex value from Primary iTable
                 ni = SRAM[0x101 + ci*2];
                 // Reached a valid end point
-                if(ni == 1) {valid = 1; break;}
+                if(ni == 1) {
+                    // Detect truncation errors
+                    // If either length = 1 or secondIndex matches... 
+                    // ...check backup ni + total ends found
+                    if( (count == 1 || SRAM[0x101 + si*2] == SRAM[0x201 + si*2]) &&
+                        (ends != si_total && SRAM[0x201 + ci*2] != 1) ) {
+                        break;
+                    }
+                    valid = 1;
+                    break;
+                }
                 // Error: Value outside range 
                 if(ni > 0x7F || ni < 0x05) break;
                 // Error: Reverse order, Mostly impossible
@@ -109,7 +125,7 @@ uint8_t check() {
                 // Same loop as before
                 ci = si;
                 while(ci != 1) {
-                    // This time target the backup
+                    // This time, target the backup
                     ni = SRAM[0x201 + ci*2];
                     if(ni == 1) {valid = 1; break;}
                     if(ni > 0x7F || ni < 0x05) break;
@@ -136,7 +152,7 @@ uint8_t check() {
         }
     }
     // Rebuild IndexTable (clear any invalid data)
-    for(int i = 0; i < 128; i++) {
+    for(uint8_t i = 0; i < 128; i++) {
         // If backup valid and primary not, restore backup
         if(i >= 5 && !(iFlags[i]&1) && iFlags[i]&2) {
             SRAM[0x101 + i*2] = SRAM[0x201 + i*2];
@@ -155,8 +171,17 @@ uint8_t check() {
     if(SRAM[0x105]) SRAM[0x105] = 0x00; // pg 2
     if(SRAM[0x107]) SRAM[0x107] = 0x00; // pg 3
     if(SRAM[0x109]) SRAM[0x109] = 0x00; // pg 4
-    // TEMP: erase checksum to avoid confusion
-    if(SRAM[0x101]) SRAM[0x101] = 0x00;
+    // Update checksum
+    uint8_t sum8 = 0;
+    for(uint8_t i = 1; i < 128; i++) {
+        sum8 += SRAM[0x101 + i*2];
+    }
+    SRAM[0x101] = sum8;
+    // Copy Primary -> Backup
+    for(uint8_t i = 0;; i++) {
+        SRAM[0x201 + i*2] = SRAM[0x101 + i*2];
+        if(i == 255) break;
+    }
 }
 
 int main() {
@@ -166,8 +191,8 @@ int main() {
     // which is what I'm using to verify correct behaviors
     fread(SRAM, sizeof(SRAM), 1, file);
     
-    // Check and repair (if needed)
-    check();
+    // Perform a repair
+    repair();
   
     // Display hex dump of IndexTable   
     for(int i = 0x100; i < 0x200; i++) {
