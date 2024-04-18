@@ -45,7 +45,6 @@ uint8_t repair() {
                 // Error: Reverse order, Mostly impossible
                 if(ni == ci || ni < ci) break;
                 if(iFlags[ci] & 0x040) {
-                    printf("We have already seen %02X \n", ci);
                     iFlags[ci] |= 0x04;
                 }
                 iFlags[ci] |= 0x40;
@@ -63,7 +62,6 @@ uint8_t repair() {
                 // Error: Reverse order, Mostly impossible
                 if(ni == ci || ni < ci) break;
                 if(iFlags[ci] & 0x080) {
-                    //printf("We have already seen %02X \n", ci);
                     iFlags[ci] |= 0x8;
                 }
                 iFlags[ci] |= 0x80;
