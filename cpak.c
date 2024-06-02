@@ -55,7 +55,7 @@ u8 check() {
               SRAM[0x302 + i*32] | SRAM[0x303 + i*32];
         if(!sih && !sum && gid && pid && si < 128 && si > 4) {
             //iFlags[si] |= 0x80;
-            nTable[i] = si;
+            nTable[nTotal] = si;
             nTotal++;
         }
     }
